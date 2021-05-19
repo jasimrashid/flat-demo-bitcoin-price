@@ -1,66 +1,29 @@
-name: data
+name: Flat
+
 on:
-  schedule:
-    - cron: 0 0 */2 * *
-  workflow_dispatch: {}
   push:
     paths:
-      - .github/workflows/flat.yml
-      - ./postprocessing/parse-covid-stats-data.js
-      - ./postprocessing/parse-mobility-data.js
-      - ./queries/query.sql
+      - .github/workflows/flat.yml # Only run a new workflow every time this file (flat.yaml) file changes
+  workflow_dispatch: # Required even though this is currently empty
+  schedule:
+    - cron: '*/5 * * * *' # Run this workflow every 5 minutes
+
 jobs:
   scheduled:
     runs-on: ubuntu-latest
-    steps:
-      - name: Setup deno
-        uses: denoland/setup-deno@main
-        with:
-          deno-version: v1.x
+    steps: # This workflow has 3 steps
+      # The first step is to check out the repository so it can read the files inside of it and do other operations
       - name: Check out repo
         uses: actions/checkout@v2
-      - name: Fetch data
-        uses: githubocto/flat@v2
-        with:
-          http_url: https://raw.githubusercontent.com/OxCGRT/USA-covid-policy/master/data/OxCGRT_US_subnational_05Aug2020.csv
-          downloaded_filename: ./raw-data/restrictions_per_state.csv
-      - name: Fetch data
-        uses: githubocto/flat@v2
-        with:
-          http_url: https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv
-          downloaded_filename: ./raw-data/covid_stats.csv
-          postprocess: ./postprocessing/parse-covid-stats-data.js
-      - name: Fetch data
-        uses: githubocto/flat@v2
-        with:
-          sql_connstring: ${{ secrets.DB_CONNECTION_STRING }}
-          sql_queryfile: ./queries/query.sql
-          downloaded_filename: ./raw-data/mobility.csv
-          postprocess: ./postprocessing/parse-mobility-data.js
-  postprocess:
-    runs-on: ubuntu-latest
-    needs: scheduled
-    steps:
+      # This step installs Deno, which is a new Javascript runtime that improves on Node. We'll use it for postprocessing later
       - name: Setup deno
         uses: denoland/setup-deno@main
         with:
           deno-version: v1.x
-      - uses: actions/checkout@master
+      # The third step is a Flat Action step. We fetch the data in the http_url and save it as downloaded_filename
+      - name: Fetch data 
+        uses: githubocto/flat@v2
         with:
-          persist-credentials: false
-          fetch-depth: 0
-      - name: Process files
-        run: deno run -A --unstable ./postprocessing/postprocess.js
-      - name: Commit & Push changes
-        uses: actions-js/push@master
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: main
-      - name: Build dashboard with updated data
-        working-directory: ./dashboard
-        run: yarn && yarn deploy-action
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dashboard/out
+          http_url: https://api.coindesk.com/v2/bpi/currentprice.json # The data to fetch every 5 minutes
+          downloaded_filename: btc-price.json # The http_url gets saved and renamed in our repository as btc-price.json
+          postprocess: postprocess.js # A postprocessing javascript or typescript file written in Deno
